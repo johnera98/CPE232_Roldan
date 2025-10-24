@@ -1,0 +1,68 @@
+- name: Deploy Web + DB container using existing Docker setup
+  hosts: all_nodes
+  become: yes
+  tasks:
+    - name: Add current user to Docker group
+      user:
+        name: "{{ ansible_user_id }}"
+        groups: docker
+        append: yes
+
+    - name: Create project directory
+      file:
+        path: /opt/docker_webdb
+        state: directory
+
+    - name: Create Dockerfile for Web and DB
+      copy:
+        dest: /opt/docker_webdb/Dockerfile
+        content: |
+          FROM ubuntu:22.04
+          RUN apt update && \
+              apt install -y apache2 mariadb-server supervisor && \
+              mkdir -p /var/log/supervisor
+          COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+          EXPOSE 80 3306
+          CMD ["/usr/bin/supervisord", "-n"]
+
+    - name: Create supervisord.conf
+      copy:
+        dest: /opt/docker_webdb/supervisord.conf
+        content: |
+          [supervisord]
+          nodaemon=true
+
+          [program:apache2]
+          command=/usr/sbin/apache2ctl -D FOREGROUND
+
+          [program:mariadb]
+          command=/usr/sbin/mysqld
+
+    - name: Build Docker image
+      command: docker build -t webdb_image /opt/docker_webdb
+      args:
+        chdir: /opt/docker_webdb
+
+    - name: Remove existing container (if any)
+      command: docker rm -f webdb_container
+      ignore_errors: yes
+
+    - name: Run web+db container
+      command: docker run -d --name webdb_container -p {{ http_port }}:80 -p {{ db_port }}:3306 webdb_image
+
+- name: Fix Docker permissions on all managed nodes
+  hosts: all
+  become: yes
+  tasks:
+    - name: Add current Ansible user to Docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    - name: Restart Docker to apply group changes
+      service:
+        name: docker
+        state: restarted
+
+

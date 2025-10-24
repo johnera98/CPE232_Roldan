@@ -1,0 +1,55 @@
+- name: Install Docker on all CentOS nodes
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install prerequisite packages
+      yum:
+        name:
+          - yum-utils
+          - device-mapper-persistent-data
+          - lvm2
+        state: present
+
+    - name: Add Docker repository
+      ansible.builtin.command:
+        cmd: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+      args:
+        creates: /etc/yum.repos.d/docker-ce.repo
+
+    - name: Install Docker Engine
+      yum:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+
+    - name: Install Python 3 and pip3
+      yum:
+        name:
+          - python3
+          - python3-pip
+        state: present
+
+    - name: Ensure pip3 command is available
+      ansible.builtin.command: python3 -m ensurepip --upgrade
+      args:
+        creates: /usr/bin/pip3
+
+    - name: Upgrade pip to the latest version
+      ansible.builtin.command: python3 -m pip install --upgrade pip
+
+    - name: Install Docker SDK for Python (via pip)
+      ansible.builtin.pip:
+        name: docker
+        state: present
+        executable: pip3
+        extra_args: --ignore-installed
+
+
+    - name: Ensure Docker service is started and enabled on boot
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: yes
+
